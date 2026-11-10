@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BS Site Finder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+/* ======================= CONFIG — edit WEBAPP_URL (and SHEET_URL) ======================= */
+const CONFIG = {
+  WEBAPP_URL: "https://script.google.com/macros/s/AKfycbyN4cw-wI7FauhdTlnSGxL_GkBDjzy_mBTtPQ__T-Glge3u_JJP6wtU8vDJOHYE6SKc4g/exec",   // ends with /exec
+  SHEET_URL:  "https://docs.google.com/spreadsheets/d/1VxyR1PjKls4iY7awKKLVMWXXqqjyy40DFONZD-8BE64/edit",                                     // optional: link to the Google Sheet
+  CITIES: ["delhi-ncr","gurgaon","noida","ghaziabad","faridabad","mumbai","thane","navi-mumbai","pune","nagpur","nashik",
+    "bangalore","hyderabad","chennai","kolkata","ahmedabad","surat","vadodara","rajkot","jaipur","lucknow","kanpur",
+    "indore","bhopal","chandigarh","mohali","zirakpur","ludhiana","amritsar","jalandhar","dehradun","agra","varanasi",
+    "patna","ranchi","raipur","bilaspur","bhubaneswar","guwahati","kochi","coimbatore","visakhapatnam","vijayawada","mysore"],
+  DEFAULTS: { min_carpet_sqft: 300, max_carpet_sqft: 1000, max_rent: 150000, min_frontage_ft: 15,
+              ground_floor_only: true, keep_unknown_floor: true, property_types: ["shops","showrooms"], max_pages_per_type: 10 }
+};
+</script>
+<style>
+:root{
+  --yellow:#FFD600; --blue:#09A6E0; --red:#CF3339; --black:#111;
+  --bg:#F6F6F3; --card:#FFFFFF; --text:#16161A; --muted:#6B6B73; --line:#E6E6E0; --soft:#FAFAF7;
+  --ok:#1E9E5A; --warn:#C98A00; --radius:12px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121214; --card:#1B1B1F; --text:#EDEDEF; --muted:#9B9BA5; --line:#2C2C33; --soft:#222227;
+  }
+}
+:root[data-theme="dark"]{ --bg:#121214; --card:#1B1B1F; --text:#EDEDEF; --muted:#9B9BA5; --line:#2C2C33; --soft:#222227; }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,sans-serif}
+header{background:var(--yellow);color:#111;padding:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header .brand{font-weight:800;letter-spacing:.04em}
+header .brand span{font-weight:500;opacity:.75;margin-left:6px}
+header .sp{flex:1}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px;background:rgba(0,0,0,.08)}
+.dot{width:8px;height:8px;border-radius:50%;background:#999}
+.dot.on{background:var(--ok)} .dot.off{background:var(--red)}
+header button{background:transparent;border:1px solid rgba(0,0,0,.25);border-radius:8px;padding:4px 10px;font:inherit;font-size:12px;cursor:pointer;color:#111}
+main{max-width:1280px;margin:0 auto;padding:20px 16px 40px;display:grid;grid-template-columns:420px minmax(0,1fr);gap:20px;align-items:start}
+main>section{min-width:0}
+@media (max-width:980px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+h2{font-size:15px;margin:0 0 14px;font-weight:700}
+h3{font-size:13px;margin:16px 0 8px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:10px 0 4px}
+input[type=text],input[type=number],input[type=password],select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--text);font:inherit}
+input:focus{outline:2px solid var(--blue);outline-offset:-1px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.checks{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:6px}
+.checks label{display:flex;align-items:center;gap:6px;margin:0;color:var(--text);font-weight:500}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:9px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer;background:var(--blue);color:#fff}
+.btn.full{width:100%;margin-top:16px;padding:12px}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+.btn.yellow{background:var(--yellow);color:#111}
+.btn.sm{padding:6px 10px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:default}
+.loclist{border:1px solid var(--line);border-radius:8px;max-height:220px;overflow:auto;background:var(--soft);margin-top:6px}
+.loclist label{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:0;padding:7px 10px;border-bottom:1px solid var(--line);color:var(--text);font-weight:500;cursor:pointer}
+.loclist label:last-child{border-bottom:0}
+.loclist label span.c{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.loclist .l{display:flex;gap:8px;align-items:center}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{background:var(--yellow);color:#111;border-radius:99px;padding:3px 4px 3px 10px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+.chip button{border:0;background:rgba(0,0,0,.12);border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:11px;line-height:18px;padding:0;color:#111}
+.hint{font-size:12px;color:var(--muted);margin-top:6px}
+.empty{padding:14px;text-align:center;color:var(--muted);font-size:13px}
+.req{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;background:var(--card)}
+.req:hover{border-color:var(--blue)}
+.req.sel{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
+.req .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.req .what{font-weight:600}
+.req .meta{font-size:12px;color:var(--muted);margin-top:3px}
+.badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;text-transform:uppercase;letter-spacing:.04em}
+.b-queued{background:#EEE;color:#555} .b-running{background:#DFF3FC;color:#05729B}
+.b-done{background:#DDF4E7;color:#16784A} .b-failed{background:#FBE1E2;color:#A42328} .b-cancelled{background:#EEE;color:#888}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .b-queued,:root:not([data-theme="light"]) .b-cancelled{background:#2C2C33;color:#BBB}}
+.detail{margin-top:16px}
+pre.log{background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:10px;font:12px/1.5 ui-monospace,Consolas,monospace;max-height:200px;overflow:auto;white-space:pre-wrap;margin:8px 0 0}
+.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:10px;margin-top:10px;max-height:560px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{position:sticky;top:0;background:var(--soft);font-weight:600;color:var(--muted);cursor:pointer;user-select:none}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.wrap{white-space:normal;min-width:180px;max-width:280px}
+.score{display:inline-block;min-width:34px;text-align:center;font-weight:700;border-radius:6px;padding:2px 6px}
+.s-hi{background:#DDF4E7;color:#16784A} .s-mid{background:#FFF4C2;color:#7A5B00} .s-lo{background:#EEE;color:#666}
+a{color:var(--blue)}
+.tag{font-size:11px;font-weight:600;color:var(--muted)}
+.login{max-width:380px;margin:60px auto}
+.err{color:var(--red);font-size:13px;margin-top:8px;min-height:18px}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.toolbar .sp{flex:1}
+.stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:8px}
+.stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">BURGER SINGH<span>Site Finder</span></div>
+  <div class="sp"></div>
+  <div class="pill" id="workerPill" title="The office PC that runs the pulls"><span class="dot" id="workerDot"></span><span id="workerTxt">Checking office PC…</span></div>
+  <a id="sheetLink" class="pill hidden" target="_blank" rel="noopener" style="color:#111;text-decoration:none">Open Google Sheet ↗</a>
+  <button id="logoutBtn" class="hidden">Sign out</button>
+</header>
+
+<!-- login -->
+<section id="loginView" class="login card hidden">
+  <h2>Sign in</h2>
+  <label for="nameIn">Your name</label>
+  <input type="text" id="nameIn" placeholder="e.g. Aviral" autocomplete="name">
+  <label for="passIn">Team passcode</label>
+  <input type="password" id="passIn" placeholder="Ask Bhargav">
+  <button class="btn full" id="loginBtn">Continue</button>
+  <div class="err" id="loginErr"></div>
+</section>
+
+<main id="appView" class="hidden">
+  <!-- request form -->
+  <section class="card">
+    <h2>New pull</h2>
+    <label for="cityIn">City</label>
+    <input type="text" id="cityIn" list="cityList" placeholder="Type or pick a city (99acres name)">
+    <datalist id="cityList"></datalist>
+
+    <label>Localities <span class="tag">— none selected = whole city</span></label>
+    <div id="locBox"></div>
+    <div class="chips" id="chips"></div>
+    <input type="text" id="typedLocs" placeholder="Or type localities, comma-separated" style="margin-top:8px">
+
+    <h3>Criteria</h3>
+    <div class="checks">
+      <label><input type="checkbox" id="tShops"> Shops</label>
+      <label><input type="checkbox" id="tShow"> Showrooms</label>
+    </div>
+    <div class="row">
+      <div><label for="minA">Min carpet (sq ft)</label><input type="number" id="minA"></div>
+      <div><label for="maxA">Max carpet (sq ft)</label><input type="number" id="maxA"></div>
+      <div><label for="maxR">Max rent (₹/month)</label><input type="number" id="maxR"></div>
+      <div><label for="minF">Min frontage (ft)</label><input type="number" id="minF"></div>
+    </div>
+    <div class="checks" style="margin-top:10px">
+      <label><input type="checkbox" id="gOnly"> Ground floor only</label>
+      <label><input type="checkbox" id="keepU"> Keep listings with floor not stated</label>
+    </div>
+    <div class="row">
+      <div><label for="pages">Max pages per type</label><input type="number" id="pages" min="1" max="20"></div>
+      <div></div>
+    </div>
+    <button class="btn full" id="submitBtn">Queue pull</button>
+    <div class="err" id="formErr"></div>
+    <div class="hint">Pulls run one at a time on the office PC, about 1–3 minutes per locality. You can close this page; results land in the Google Sheet too.</div>
+  </section>
+
+  <!-- requests + results -->
+  <section>
+    <div class="card">
+      <div class="toolbar">
+        <h2 style="margin:0">Requests</h2>
+        <div class="sp"></div>
+        <label class="tag" style="margin:0;display:flex;gap:6px;align-items:center"><input type="checkbox" id="mineOnly"> Only mine</label>
+        <button class="btn ghost sm" id="refreshBtn">Refresh</button>
+      </div>
+      <div id="reqList" style="margin-top:12px"><div class="empty">Loading…</div></div>
+    </div>
+
+    <div class="card detail hidden" id="detail">
+      <div class="toolbar">
+        <h2 style="margin:0" id="dTitle"></h2>
+        <div class="sp"></div>
+        <button class="btn ghost sm hidden" id="cancelBtn">Cancel request</button>
+        <button class="btn yellow sm hidden" id="csvBtn">Download CSV</button>
+      </div>
+      <div class="stats" id="dStats"></div>
+      <details id="logWrap" style="margin-top:10px"><summary class="tag" style="cursor:pointer">Progress log</summary><pre class="log" id="dLog"></pre></details>
+      <div id="dResults"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const store = {
+  get(k){ try { return JSON.parse(localStorage.getItem('bssf_'+k)); } catch(e){ return null; } },
+  set(k,v){ try { localStorage.setItem('bssf_'+k, JSON.stringify(v)); } catch(e){} }
+};
+let session = store.get('session');          // {name, passcode}
+let requests = [], selectedId = null, results = [], sortKey = 'fit_score', sortDir = -1;
+let locState = { city: '', list: [], selected: new Set(), search: '', pendingId: null };
+
+function slug(s){ return String(s||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function inr(n){ n = Number(n); return isFinite(n) && n ? '₹' + n.toLocaleString('en-IN') : '—'; }
+
+async function api(action, data = {}){
+  if (!/^https?:\/\//.test(CONFIG.WEBAPP_URL)) throw new Error('WEBAPP_URL is not set in index.html');
+  const r = await fetch(CONFIG.WEBAPP_URL, { method: 'POST', body: JSON.stringify({ action, passcode: session?.passcode, ...data }) });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || 'Request failed');
+  return j;
+}
+
+/* ------------------------------ login */
+function showLogin(){ $('loginView').classList.remove('hidden'); $('appView').classList.add('hidden'); $('logoutBtn').classList.add('hidden'); }
+function showApp(){ $('loginView').classList.add('hidden'); $('appView').classList.remove('hidden'); $('logoutBtn').classList.remove('hidden'); }
+$('loginBtn').onclick = async () => {
+  const name = $('nameIn').value.trim(), passcode = $('passIn').value;
+  $('loginErr').textContent = '';
+  if (!name) { $('loginErr').textContent = 'Enter your name.'; return; }
+  session = { name, passcode };
+  $('loginBtn').disabled = true;
+  try { const j = await api('ping'); store.set('session', session); showApp(); setWorker(j.worker_seen); init(); }
+  catch(e){ $('loginErr').textContent = e.message; session = null; }
+  $('loginBtn').disabled = false;
+};
+$('passIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('loginBtn').click(); });
+$('logoutBtn').onclick = () => { store.set('session', null); session = null; showLogin(); };
+
+/* ------------------------------ worker status */
+function setWorker(seen){
+  const dot = $('workerDot'), txt = $('workerTxt');
+  if (!seen){ dot.className = 'dot off'; txt.textContent = 'Office PC not connected yet'; return; }
+  const t = new Date(String(seen).replace(' ', 'T') + '+05:30');
+  const mins = (Date.now() - t.getTime()) / 60000;
+  if (mins < 3){ dot.className = 'dot on'; txt.textContent = 'Office PC online'; }
+  else { dot.className = 'dot off'; txt.textContent = 'Office PC offline · last seen ' + fmtAgo(mins) + ' — requests will wait'; }
+}
+function fmtAgo(m){ return m < 60 ? Math.round(m) + ' min ago' : m < 1440 ? Math.round(m/60) + ' h ago' : Math.round(m/1440) + ' d ago'; }
+
+/* ------------------------------ form */
+function fillDefaults(){
+  const d = { ...CONFIG.DEFAULTS, ...(store.get('criteria') || {}) };
+  $('tShops').checked = d.property_types.includes('shops');
+  $('tShow').checked = d.property_types.includes('showrooms');
+  $('minA').value = d.min_carpet_sqft; $('maxA').value = d.max_carpet_sqft;
+  $('maxR').value = d.max_rent; $('minF').value = d.min_frontage_ft;
+  $('gOnly').checked = d.ground_floor_only; $('keepU').checked = d.keep_unknown_floor;
+  $('pages').value = d.max_pages_per_type;
+  $('cityList').innerHTML = CONFIG.CITIES.map(c => `<option value="${esc(c)}">`).join('');
+  const lastCity = store.get('city'); if (lastCity) $('cityIn').value = lastCity;
+}
+function readCriteria(){
+  const n = id => Number($(id).value);
+  const c = {
+    min_carpet_sqft: n('minA'), max_carpet_sqft: n('maxA'), max_rent: n('maxR'), min_frontage_ft: n('minF'),
+    ground_floor_only: $('gOnly').checked, keep_unknown_floor: $('keepU').checked,
+    property_types: [$('tShops').checked && 'shops', $('tShow').checked && 'showrooms'].filter(Boolean),
+    max_pages_per_type: Math.max(1, Math.min(20, n('pages') || 10))
+  };
+  if (!c.property_types.length) throw new Error('Tick Shops and/or Showrooms.');
+  if (!(c.max_carpet_sqft >= c.min_carpet_sqft)) throw new Error('Max carpet must be ≥ min carpet.');
+  if (!(c.max_rent > 0)) throw new Error('Enter a max rent.');
+  return c;
+}
+
+/* ------------------------------ localities */
+async function loadLocalities(){
+  const city = slug($('cityIn').value);
+  if (city === locState.city) return;
+  locState = { city, list: [], selected: new Set(), search: '', pendingId: null, loading: !!city };
+  renderLocs();
+  if (!city) return;
+  try {
+    const j = await api('localities', { city });
+    if (slug($('cityIn').value) !== city) return;
+    locState.list = j.localities.sort((a,b) => b.count - a.count);
+  } catch(e){ locState.error = e.message; }
+  locState.loading = false;
+  locState.pendingId = (requests.find(r => r.type === 'localities' && r.city === city && (r.status === 'queued' || r.status === 'running')) || {}).id || null;
+  renderLocs();
+}
+function renderLocs(){
+  const box = $('locBox');
+  if (!locState.city){ box.innerHTML = '<div class="hint">Pick a city to see its localities.</div>'; renderChips(); return; }
+  if (locState.loading){ box.innerHTML = '<div class="hint">Loading localities…</div>'; return; }
+  if (!locState.list.length){
+    box.innerHTML = locState.pendingId
+      ? `<div class="hint">Fetching the locality list from 99acres on the office PC… this updates by itself.</div>`
+      : `<div class="hint">No locality list for <b>${esc(locState.city)}</b> yet.</div>
+         <button class="btn ghost sm" id="fetchLocs" style="margin-top:6px">Fetch locality list from 99acres</button>`;
+    const b = $('fetchLocs'); if (b) b.onclick = fetchLocList;
+    renderChips(); return;
+  }
+  const term = locState.search.toLowerCase();
+  const shown = locState.list.filter(l => l.name.toLowerCase().includes(term));
+  box.innerHTML = `<input type="text" id="locSearch" placeholder="Search ${locState.list.length} localities" value="${esc(locState.search)}">
+    <div class="loclist">${shown.map(l => `<label><span class="l"><input type="checkbox" data-n="${esc(l.name)}" ${locState.selected.has(l.name)?'checked':''}> ${esc(l.name)}</span><span class="c">${l.count ? l.count + ' listings' : ''}</span></label>`).join('') || '<div class="empty">No match</div>'}</div>
+    <div class="hint" style="display:flex;justify-content:space-between"><span>Counts are 99acres shop listings.</span><a href="#" id="refetchLocs">Refresh list</a></div>`;
+  const s = $('locSearch');
+  s.oninput = () => { locState.search = s.value; const pos = s.selectionStart; renderLocs(); const n = $('locSearch'); n.focus(); n.setSelectionRange(pos,pos); };
+  box.querySelectorAll('input[type=checkbox]').forEach(cb => cb.onchange = () => {
+    cb.checked ? locState.selected.add(cb.dataset.n) : locState.selected.delete(cb.dataset.n); renderChips();
+  });
+  $('refetchLocs').onclick = e => { e.preventDefault(); fetchLocList(); };
+  renderChips();
+}
+function renderChips(){
+  $('chips').innerHTML = [...locState.selected].map(n => `<span class="chip">${esc(n)}<button data-n="${esc(n)}" aria-label="Remove">✕</button></span>`).join('');
+  $('chips').querySelectorAll('button').forEach(b => b.onclick = () => { locState.selected.delete(b.dataset.n); renderLocs(); });
+}
+async function fetchLocList(){
+  try {
+    const j = await api('submit', { type: 'localities', city: locState.city, requested_by: session.name });
+    locState.pendingId = j.id; locState.list = []; renderLocs(); refreshRequests();
+  } catch(e){ $('formErr').textContent = e.message; }
+}
+let cityTimer;
+$('cityIn').addEventListener('input', () => { clearTimeout(cityTimer); cityTimer = setTimeout(loadLocalities, 500); });
+$('cityIn').addEventListener('change', loadLocalities);
+
+/* ------------------------------ submit */
+$('submitBtn').onclick = async () => {
+  $('formErr').textContent = '';
+  try {
+    const city = slug($('cityIn').value);
+    if (!city) throw new Error('Pick a city.');
+    const criteria = readCriteria();
+    const typed = $('typedLocs').value.split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+    const localities = [...new Set([...locState.selected, ...typed])];
+    $('submitBtn').disabled = true;
+    const j = await api('submit', { type: 'pull', city, localities, criteria, requested_by: session.name });
+    store.set('criteria', criteria); store.set('city', city);
+    $('typedLocs').value = '';
+    selectedId = j.id;
+    if (j.duplicate) $('formErr').textContent = 'The same pull is already in the queue — showing it.';
+    await refreshRequests();
+  } catch(e){ $('formErr').textContent = e.message; }
+  $('submitBtn').disabled = false;
+};
+
+/* ------------------------------ requests */
+async function refreshRequests(){
+  try {
+    const j = await api('requests');
+    requests = j.requests; setWorker(j.worker_seen);
+    renderRequests();
+    // locality list finished?
+    if (locState.pendingId){
+      const r = requests.find(x => x.id === locState.pendingId);
+      if (r && (r.status === 'done' || r.status === 'failed')){ const c = locState.city; locState.city = ''; $('cityIn').value = c; loadLocalities(); }
+    }
+    if (selectedId) renderDetail();
+  } catch(e){
+    if (/passcode/i.test(e.message)){ store.set('session', null); session = null; started = false; showLogin(); $('loginErr').textContent = 'Passcode changed — please sign in again.'; return; }
+    $('reqList').innerHTML = `<div class="empty">${esc(e.message)}</div>`;
+  }
+}
+function reqLabel(r){
+  if (r.type === 'localities') return `Locality list · ${r.city}`;
+  return `${r.city}${r.localities ? ' · ' + r.localities : ' · whole city'}`;
+}
+function renderRequests(){
+  let list = requests;
+  if ($('mineOnly').checked) list = list.filter(r => String(r.requested_by).toLowerCase() === session.name.toLowerCase());
+  const queued = requests.filter(r => r.status === 'queued').map(r => r.id).reverse();
+  $('reqList').innerHTML = list.length ? list.map(r => {
+    const pos = r.status === 'queued' ? ` · #${queued.indexOf(r.id) + 1} in queue` : '';
+    const res = r.status === 'done' && r.type === 'pull' ? ` · <b>${r.matched || 0}</b> matches (${r.added || 0} new)` : (r.message && r.status !== 'running' ? ' · ' + esc(r.message) : '');
+    return `<div class="req ${r.id === selectedId ? 'sel' : ''}" data-id="${esc(r.id)}">
+      <div class="top"><span class="badge b-${esc(r.status)}">${esc(r.status)}</span><span class="what">${esc(reqLabel(r))}</span></div>
+      <div class="meta">${esc(r.requested_by)} · ${esc(String(r.created_at).slice(0,16))}${pos}${res}</div></div>`;
+  }).join('') : '<div class="empty">No requests yet. Queue your first pull on the left.</div>';
+  $('reqList').querySelectorAll('.req').forEach(el => el.onclick = () => { selectedId = el.dataset.id; results = []; renderRequests(); renderDetail(true); });
+}
+$('mineOnly').onchange = renderRequests;
+$('refreshBtn').onclick = refreshRequests;
+
+/* ------------------------------ detail + results */
+let loadedResultsFor = null;
+async function renderDetail(force){
+  const r = requests.find(x => x.id === selectedId);
+  const d = $('detail');
+  if (!r){ d.classList.add('hidden'); return; }
+  d.classList.remove('hidden');
+  $('dTitle').textContent = reqLabel(r);
+  $('cancelBtn').classList.toggle('hidden', r.status !== 'queued');
+  $('dLog').textContent = r.log || '(no progress yet)';
+  const stats = [['Status', r.status], ['Requested by', r.requested_by], ['Submitted', String(r.created_at).slice(0,16)]];
+  if (r.type === 'pull' && r.status === 'done') stats.push(['Matches', r.matched || 0], ['New to sheet', r.added || 0], ['Seen before', r.updated || 0]);
+  $('dStats').innerHTML = stats.map(([k,v]) => `<div class="stat"><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join('');
+  if (r.status === 'running') $('logWrap').open = true;
+
+  if (r.type !== 'pull' || r.status !== 'done'){
+    $('csvBtn').classList.add('hidden');
+    $('dResults').innerHTML = r.status === 'failed' ? `<div class="err">${esc(r.message || 'Failed')}</div>` :
+      r.type === 'pull' ? '<div class="hint" style="margin-top:12px">Results appear here when the pull finishes.</div>' : '';
+    return;
+  }
+  if (force || loadedResultsFor !== r.id){
+    loadedResultsFor = r.id;
+    $('dResults').innerHTML = '<div class="hint" style="margin-top:12px">Loading results…</div>';
+    try { results = (await api('results', { request_id: r.id })).rows; } catch(e){ $('dResults').innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  }
+  renderResults();
+}
+const COLS = [
+  ['fit_score','Score','num'], ['search_locality','Searched'], ['locality','Locality'], ['building','Building'],
+  ['floor','Floor'], ['carpet_sqft','Carpet','num'], ['rent','Rent','num'], ['rent_per_sqft','₹/sq ft','num'],
+  ['frontage_ft','Frontage','num'], ['main_road','Main rd'], ['corner','Corner'], ['listed_by','Listed by'],
+  ['posted_on','Posted'], ['highlights','Highlights','wrap']
+];
+function renderResults(){
+  $('csvBtn').classList.toggle('hidden', !results.length);
+  if (!results.length){ $('dResults').innerHTML = '<div class="empty">No listings matched. Try widening the criteria.</div>'; return; }
+  const rows = [...results].sort((a,b) => {
+    const x = a[sortKey], y = b[sortKey], nx = Number(x), ny = Number(y);
+    const cmp = (x !== '' && y !== '' && isFinite(nx) && isFinite(ny)) ? nx - ny : String(x).localeCompare(String(y));
+    return cmp * sortDir;
+  });
+  const cell = (r, [k,,cls]) => {
+    let v = r[k];
+    if (k === 'fit_score'){ const s = Number(v); return `<td class="num"><span class="score ${s>=70?'s-hi':s>=45?'s-mid':'s-lo'}">${s}</span></td>`; }
+    if (k === 'rent') v = inr(v);
+    if (k === 'carpet_sqft' && v) v = Number(v).toLocaleString('en-IN');
+    if (k === 'frontage_ft' && v) v = v + ' ft';
+    return `<td class="${cls||''}">${esc(v === '' || v == null ? '—' : v)}</td>`;
+  };
+  $('dResults').innerHTML = `<div class="tablewrap"><table><thead><tr>${COLS.map(([k,l,c]) => `<th class="${c==='num'?'num':''}" data-k="${k}">${l}${sortKey===k?(sortDir<0?' ↓':' ↑'):''}</th>`).join('')}<th>Links</th></tr></thead>
+    <tbody>${rows.map(r => `<tr>${COLS.map(c => cell(r,c)).join('')}<td>${r.listing_url?`<a href="${esc(r.listing_url)}" target="_blank" rel="noopener">99acres</a>`:''}${r.maps_link?` · <a href="${esc(r.maps_link)}" target="_blank" rel="noopener">Map</a>`:''}</td></tr>`).join('')}</tbody></table></div>
+    <div class="hint">${results.length} listings${results.length >= 300 ? ' (top 300 shown — full list in the Google Sheet)' : ''}. Click a column to sort.</div>`;
+  $('dResults').querySelectorAll('th[data-k]').forEach(th => th.onclick = () => {
+    const k = th.dataset.k; sortDir = sortKey === k ? -sortDir : -1; sortKey = k; renderResults();
+  });
+}
+$('csvBtn').onclick = () => {
+  if (!results.length) return;
+  const keys = Object.keys(results[0]);
+  const q = v => `"${String(v ?? '').replace(/"/g,'""')}"`;
+  const csv = '﻿' + [keys.map(q).join(','), ...results.map(r => keys.map(k => q(r[k])).join(','))].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  const r = requests.find(x => x.id === selectedId);
+  a.download = `bs_sites_${slug(r ? reqLabel(r) : 'results')}.csv`; a.click();
+};
+$('cancelBtn').onclick = async () => {
+  try { await api('cancel', { id: selectedId }); refreshRequests(); } catch(e){ alertInline(e.message); }
+};
+function alertInline(m){ $('dResults').innerHTML = `<div class="err">${esc(m)}</div>`; }
+
+/* ------------------------------ boot */
+let started = false;
+function init(){
+  if (started) return; started = true;
+  fillDefaults(); renderLocs(); loadLocalities(); refreshRequests();
+  setInterval(() => { if (!document.hidden) refreshRequests(); }, 15000);
+}
+if (CONFIG.SHEET_URL){ $('sheetLink').href = CONFIG.SHEET_URL; $('sheetLink').classList.remove('hidden'); }
+if (session){ showApp(); init(); } else showLogin();
+</script>
+</body>
+</html>
